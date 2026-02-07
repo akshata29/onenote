@@ -1,0 +1,15 @@
+name: ingestion-workflow
+trigger: manual
+steps:
+  - name: list-notebooks
+    tool: graph-tool
+  - name: fetch-sections
+    tool: graph-tool
+  - name: fetch-pages
+    tool: graph-tool
+  - name: extract-and-chunk
+    tool: ingestion
+  - name: embed-and-index
+    tool: search-tool
+  - name: finalize
+    tool: telemetry

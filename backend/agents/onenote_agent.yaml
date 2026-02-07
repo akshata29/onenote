@@ -1,0 +1,19 @@
+name: onenote-rag-agent
+model: gpt-4o-mini
+tools:
+  - name: graph-tool
+    description: Access OneNote via Graph for delegated user
+    endpoint: /notebooks
+  - name: search-tool
+    description: Query Azure AI Search index
+    endpoint: /chat
+  - name: mcp-tool
+    description: Proxy to MCP server for on-demand retrieval
+    endpoint: /chat
+workflows:
+  - name: chat-workflow
+    steps:
+      - classify-intent
+      - select-mode
+      - retrieve
+      - compose-answer
