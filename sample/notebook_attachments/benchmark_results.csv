@@ -1,0 +1,10 @@
+Framework,Query_Type,Response_Time_ms,Accuracy_Percent,Cost_Per_Query,Memory_Usage_MB
+Azure AI Search,Semantic,1200,87,0.003,450
+Azure AI Search,Hybrid,1100,89,0.0035,480
+Azure AI Search,Keyword,800,85,0.002,420
+Pinecone,Semantic,1500,85,0.005,520
+Pinecone,Hybrid,1400,87,0.0055,550
+ChromaDB,Semantic,2100,82,0.002,380
+ChromaDB,Hybrid,2000,84,0.0025,410
+Weaviate,Semantic,1800,84,0.004,460
+Weaviate,Hybrid,1700,86,0.0045,490

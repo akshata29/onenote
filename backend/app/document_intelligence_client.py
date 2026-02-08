@@ -75,20 +75,29 @@ class DocumentIntelligenceClient:
             
         try:
             file_ext = filename.lower().split('.')[-1] if '.' in filename else ''
+            logger.info(f"📄 Processing document: {filename} (type: {file_ext}, size: {len(file_content)} bytes)")
             
             if file_ext not in self.supported_extensions:
-                logger.warning(f"Unsupported file type: {file_ext}")
+                logger.error(f"❌ Unsupported file type: {file_ext} (supported: {self.supported_extensions})")
                 return {
                     "success": False,
                     "error": f"Unsupported file type: {file_ext}",
                     "content": "",
-                    "metadata": {}
+                    "metadata": {"filename": filename, "error_reason": "unsupported_type"}
                 }
             
+            logger.info(f"✅ File type {file_ext} is supported - starting Document Intelligence analysis for {filename}")
+            
             # Use layout model for comprehensive extraction
+            # Create AnalyzeDocumentRequest with bytes_source (per Microsoft documentation)
+            analyze_request = AnalyzeDocumentRequest(bytes_source=file_content)
+            
+            logger.info(f"🔍 Calling Document Intelligence API for {filename}...")
+            
+            # Call API with AnalyzeDocumentRequest
             poller = await self.client.begin_analyze_document(
                 "prebuilt-layout",
-                body=file_content,
+                analyze_request,
                 features=[
                     DocumentAnalysisFeature.LANGUAGES,
                     DocumentAnalysisFeature.KEY_VALUE_PAIRS
@@ -96,17 +105,21 @@ class DocumentIntelligenceClient:
                 output_content_format=ContentFormat.MARKDOWN
             )
             
+            logger.info(f"🔄 Document Intelligence analysis started for {filename}, waiting for results...")
             result: AnalyzeResult = await poller.result()
+            logger.info(f"✅ Document Intelligence analysis completed for {filename}")
+            logger.info(f"📊 Result summary - Pages: {len(result.pages or [])}, Tables: {len(result.tables or [])}, Content length: {len(result.content or '')}")
             
             return await self._process_analysis_result(result, filename, file_ext)
             
         except Exception as e:
-            logger.error(f"Document Intelligence analysis failed for {filename}: {str(e)}")
+            logger.error(f"❌ Document Intelligence analysis failed for {filename}: {str(e)}")
+            logger.exception("Full error details:")
             return {
                 "success": False,
                 "error": str(e),
                 "content": "",
-                "metadata": {}
+                "metadata": {"filename": filename, "error_reason": "analysis_failed"}
             }
     
     async def _process_analysis_result(
@@ -119,12 +132,16 @@ class DocumentIntelligenceClient:
         Process the Document Intelligence analysis result.
         """
         try:
+            logger.info(f"📝 Processing analysis result for {filename} ({file_ext})")
+            
             # Extract main content
             content = result.content or ""
+            logger.info(f"📄 Main content extracted: {len(content)} characters")
             
             # Extract tables as structured text
             tables_content = []
             if result.tables:
+                logger.info(f"📊 Processing {len(result.tables)} tables")
                 for table_idx, table in enumerate(result.tables):
                     table_text = f"\n## Table {table_idx + 1}\n"
                     table_text += f"Rows: {table.row_count}, Columns: {table.column_count}\n\n"

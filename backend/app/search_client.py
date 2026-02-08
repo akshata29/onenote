@@ -109,6 +109,111 @@ class AISearchClient:
         """Close the clients."""
         await self.client.close()
         await self.index_client.close()
+    
+    async def delete_notebook_documents(self, notebook_id: str) -> Dict[str, Any]:
+        """
+        Delete all documents for a specific notebook from the search index.
+        
+        Args:
+            notebook_id: The notebook ID to delete documents for
+            
+        Returns:
+            Dict with deletion statistics
+        """
+        try:
+            logger.info(f"Searching for documents to delete with notebook_id: '{notebook_id}'")
+            
+            # First, let's see what documents exist in the index
+            all_docs_results = await self.client.search(
+                search_text="*",
+                select=["id", "notebook_id", "notebook_name", "content_type"],
+                top=50
+            )
+            
+            logger.info("Sample documents in index:")
+            async for doc in all_docs_results:
+                logger.info(f"  ID: {doc['id']}, notebook_id: '{doc.get('notebook_id')}', name: '{doc.get('notebook_name')}', type: {doc.get('content_type')}")
+            
+            # Search for all documents with the notebook_id
+            search_results = await self.client.search(
+                search_text="*",
+                filter=f"notebook_id eq '{notebook_id}'",
+                select=["id", "notebook_id", "notebook_name"],
+                top=10000  # Get all documents for this notebook
+            )
+            
+            # Collect document IDs to delete
+            doc_ids = []
+            async for result in search_results:
+                logger.info(f"Found document to delete: {result['id']} (notebook_id: '{result.get('notebook_id')}')")
+                doc_ids.append(result["id"])
+            
+            logger.info(f"Total documents found for notebook {notebook_id}: {len(doc_ids)}")
+            
+            if not doc_ids:
+                logger.info(f"No documents found for notebook {notebook_id}")
+                return {
+                    "success": True,
+                    "deleted_count": 0,
+                    "message": "No documents found to delete"
+                }
+            
+            # Delete documents in batches
+            batch_size = 1000
+            total_deleted = 0
+            
+            for i in range(0, len(doc_ids), batch_size):
+                batch = doc_ids[i:i + batch_size]
+                delete_docs = [{"id": doc_id} for doc_id in batch]
+                
+                await self.client.delete_documents(delete_docs)
+                total_deleted += len(batch)
+                logger.info(f"Deleted batch of {len(batch)} documents for notebook {notebook_id}")
+            
+            logger.info(f"Successfully deleted {total_deleted} documents for notebook {notebook_id}")
+            return {
+                "success": True,
+                "deleted_count": total_deleted,
+                "message": f"Successfully deleted {total_deleted} documents"
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to delete documents for notebook {notebook_id}: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "deleted_count": 0
+            }
+    
+    async def get_document_count_by_notebook(self, notebook_id: str) -> int:
+        """
+        Get the count of documents for a specific notebook.
+        
+        Args:
+            notebook_id: The notebook ID to count documents for
+            
+        Returns:
+            Number of documents in the index for this notebook
+        """
+        try:
+            search_results = await self.client.search(
+                search_text="*",
+                filter=f"notebook_id eq '{notebook_id}'",
+                select=["id"],
+                include_total_count=True,
+                top=0  # We only want the count
+            )
+            
+            # Count the results manually since include_total_count might not work as expected
+            count = 0
+            async for _ in search_results:
+                count += 1
+                
+            return count
+            
+        except Exception as e:
+            logger.error(f"Failed to count documents for notebook {notebook_id}: {str(e)}")
+            return 0
 
     async def search(
         self, 
@@ -268,10 +373,32 @@ class AISearchClient:
             
         except Exception as e:
             logger.error(f"Facet query failed: {str(e)}")
-            # If index doesn't exist yet, return empty facets rather than failing
-            if "was not found" in str(e):
-                logger.warning("Search index not found - returning empty facets")
             return {}
+
+    async def get_indexed_notebook_ids(self) -> set[str]:
+        """
+        Get the list of notebook IDs that are currently indexed in Azure AI Search.
+        """
+        try:
+            # Use a simple approach - get unique notebook_ids by searching and aggregating
+            results = await self.client.search(
+                search_text="*",
+                select=["notebook_id"],
+                top=10000  # Get all results to count unique notebook IDs
+            )
+            
+            indexed_ids = set()
+            async for result in results:
+                notebook_id = result.get("notebook_id")
+                if notebook_id:
+                    indexed_ids.add(notebook_id)
+            
+            logger.info(f"Found {len(indexed_ids)} indexed notebooks in AI Search: {list(indexed_ids)}")
+            return indexed_ids
+            
+        except Exception as e:
+            logger.error(f"Failed to get indexed notebook IDs: {str(e)}")
+            return set()
     
     async def get_search_suggestions(self, query: str, top: int = 5) -> List[str]:
         """

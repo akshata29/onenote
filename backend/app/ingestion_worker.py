@@ -136,6 +136,7 @@ class IngestionWorker:
             
             # Process attachments if enabled
             if self.settings.enable_attachment_processing:
+                logger.info(f"Attachment processing is ENABLED for page {page_id}")
                 await self._process_page_attachments(
                     page_id=page_id,
                     notebook_id=notebook_id,
@@ -146,6 +147,8 @@ class IngestionWorker:
                     created_time=created_time,
                     modified_time=modified_time
                 )
+            else:
+                logger.warning(f"Attachment processing is DISABLED for page {page_id}")
             
             self.stats["pages_processed"] += 1
             
@@ -199,11 +202,27 @@ class IngestionWorker:
                 logger.error(f"Invalid vector length at index {idx}: expected 1536, got {len(vector)}")
                 vector = [0.0] * 1536  # Fallback to zero vector
             
+            # Handle attachment-specific fields
+            attachment_filename = ""
+            attachment_filetype = ""
+            document_title = page_title or "Untitled"
+            enhanced_content = chunk["content"]
+            
+            if attachment_metadata:
+                attachment_filename = attachment_metadata.get("attachment_filename", "")
+                attachment_filetype = attachment_metadata.get("attachment_filetype", "")
+                
+                # For attachments, enhance title and content for better searchability
+                if attachment_filename:
+                    document_title = f"{attachment_filename} - {page_title or 'Untitled'}"
+                    # Add filename as searchable text at the beginning of content
+                    enhanced_content = f"ATTACHMENT: {attachment_filename}\n\n{chunk['content']}"
+            
             base_doc = {
                 "id": doc_id,
-                "content": chunk["content"],
+                "content": enhanced_content,  # Include filename in content for attachments
                 "content_vector": vector,
-                "title": page_title or "Untitled",
+                "title": document_title,  # Include filename in title for attachments
                 "page_id": page_id,
                 "page_title": page_title or "",
                 "section_id": section_id,
@@ -211,12 +230,8 @@ class IngestionWorker:
                 "notebook_id": notebook_id,
                 "notebook_name": notebook_name or "",
                 "content_type": content_type,
-                "attachment_filetype": "",  # Default empty, will be overridden if attachment
+                "attachment_filetype": attachment_filetype,
             }
-            
-            # Add attachment-specific metadata if present
-            if attachment_metadata:
-                base_doc["attachment_filetype"] = attachment_metadata.get("attachment_filetype", "")
             
             docs.append(base_doc)
         
@@ -241,15 +256,28 @@ class IngestionWorker:
         Process all attachments for a given page.
         """
         try:
+            logger.info(f"\n🔍 INGESTION DEBUG: Starting attachment processing for page {page_id} ({page_title})")
+            
             # Get attachments from the page
             attachments = await self.graph.list_page_attachments(page_id)
             
-            if not attachments:
+            logger.info(f"📊 INGESTION DEBUG: Found {len(attachments)} attachments for page {page_id} ({page_title})")
+            
+            if attachments:
+                logger.info(f"📋 INGESTION DEBUG: Attachment details:")
+                for i, att in enumerate(attachments):
+                    logger.info(f"   {i+1}. Name: {att.get('name', 'unknown')}, Type: {att.get('contentType', 'unknown')}, Size: {att.get('size', 0)} bytes")
+            else:
+                logger.warning(f"❌ INGESTION DEBUG: NO ATTACHMENTS FOUND for page {page_id}! This might indicate:")
+                logger.warning(f"   - HTML parsing patterns are incorrect for OneNote structure")
+                logger.warning(f"   - Attachments are embedded differently than expected")
+                logger.warning(f"   - Page actually has no attachments (unlikely based on user report)")
                 return
             
-            logger.info(f"Found {len(attachments)} attachments for page {page_id}")
+            logger.info(f"Processing {len(attachments)} attachments for page {page_id}")
             
-            for attachment in attachments:
+            for i, attachment in enumerate(attachments):
+                logger.info(f"Processing attachment {i+1}/{len(attachments)}: {attachment.get('name', 'unknown')}")
                 try:
                     await self._process_single_attachment(
                         attachment=attachment,
@@ -263,11 +291,11 @@ class IngestionWorker:
                         modified_time=modified_time
                     )
                 except Exception as e:
-                    logger.error(f"Failed to process attachment {attachment.get('name', 'unknown')}: {str(e)}")
+                    logger.error(f"Failed to process attachment {attachment.get('name', 'unknown')}: {str(e)}", exc_info=True)
                     self.stats["errors"] += 1
                     
         except Exception as e:
-            logger.error(f"Failed to get attachments for page {page_id}: {str(e)}")
+            logger.error(f"Failed to get attachments for page {page_id}: {str(e)}", exc_info=True)
     
     async def _process_single_attachment(
         self,
@@ -303,14 +331,25 @@ class IngestionWorker:
                 return
             
             # Process with Document Intelligence
+            logger.info(f"📄 Processing {attachment_name} with Document Intelligence...")
+            logger.info(f"   File size: {file_size} bytes")
+            logger.info(f"   Content type: {attachment.get('contentType', 'unknown')}")
+            
             analysis_result = await self.doc_intelligence.analyze_document(
                 file_content=attachment_content,
                 filename=attachment_name,
                 content_type=attachment.get("contentType")
             )
             
+            logger.info(f"📊 Document Intelligence result for {attachment_name}:")
+            logger.info(f"   Success: {analysis_result.get('success', False)}")
+            logger.info(f"   Content length: {len(analysis_result.get('content', ''))}")
+            logger.info(f"   Error: {analysis_result.get('error', 'None')}")
+            
             if not analysis_result.get("success"):
-                logger.warning(f"Document Intelligence failed for {attachment_name}: {analysis_result.get('error')}")
+                logger.error(f"❌ Document Intelligence failed for {attachment_name}: {analysis_result.get('error')}")
+                # Don't return - try to continue processing other attachments
+                self.stats["errors"] += 1
                 return
             
             # Extract content and metadata

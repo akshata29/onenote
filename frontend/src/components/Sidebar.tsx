@@ -9,9 +9,27 @@ interface Props {
   pages: any[];
   scope: { notebook?: string; section?: string; page?: string };
   onScopeChange: (s: { notebook?: string; section?: string; page?: string }) => void;
+  onRefresh: () => Promise<void>;
+  isRefreshing: boolean;
+  errors: {
+    notebooks?: Error;
+    sections?: Error;
+    pages?: Error;
+  };
 }
 
-export function Sidebar({ mode, onModeChange, notebooks, sections, pages, scope, onScopeChange }: Props) {
+export function Sidebar({ 
+  mode, 
+  onModeChange, 
+  notebooks, 
+  sections, 
+  pages, 
+  scope, 
+  onScopeChange,
+  onRefresh,
+  isRefreshing,
+  errors
+}: Props) {
   const getStringValue = (value: string | undefined): string => {
     if (value === undefined || value === null) {
       return "";
@@ -30,6 +48,45 @@ export function Sidebar({ mode, onModeChange, notebooks, sections, pages, scope,
       <div>
         <p className="text-xs uppercase text-slate-400 mb-2">Mode</p>
         <ModeToggle value={mode} onChange={onModeChange} />
+      </div>
+
+      {/* Refresh Controls */}
+      <div className="space-y-2">
+        <button
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          className="w-full py-2 px-3 bg-slate-600 hover:bg-slate-500 disabled:bg-slate-700 disabled:opacity-50 
+                     text-slate-100 text-sm font-medium rounded-lg transition-colors
+                     flex items-center justify-center gap-2"
+        >
+          {isRefreshing ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-300 border-t-transparent"></div>
+              Refreshing...
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh Data
+            </>
+          )}
+        </button>
+        
+        {/* Error Display */}
+        {(errors.notebooks || errors.sections || errors.pages) && (
+          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+            <p className="text-red-400 font-medium text-xs mb-1">Connection Issues</p>
+            <p className="text-slate-300 text-xs">
+              {errors.notebooks?.message.includes('429') || 
+               errors.sections?.message.includes('429') || 
+               errors.pages?.message.includes('429') 
+                ? 'Rate limited. Please wait before refreshing.' 
+                : 'Failed to load data. Try refreshing.'}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Only show notebook/section selectors in chat modes */}

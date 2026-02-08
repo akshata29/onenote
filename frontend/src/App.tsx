@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import { authFetch, postAuth } from "./api";
 import { ChatPanel } from "./components/ChatPanel";
 import { Sidebar } from "./components/Sidebar";
@@ -51,19 +51,65 @@ export default function App() {
   const token = useAccessToken();
   const [mode, setMode] = useState<Mode>("search");
   const [scope, setScope] = useState<{ notebook?: string; section?: string; page?: string }>({});
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Manual refresh function for when needed
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await mutate('/notebooks');
+      if (scope.notebook) await mutate(`/notebooks/${scope.notebook}/sections`);
+      if (scope.section) await mutate(`/sections/${scope.section}/pages`);
+    } catch (error) {
+      console.error('Manual refresh failed:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const fetcher = async (url: string) => {
     if (!token) throw new Error("no token yet");
-    const response = await authFetch(url, token);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    
+    try {
+      const response = await authFetch(url, token);
+      
+      // Handle rate limiting gracefully
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 30000;
+        throw new Error(`Rate limited. Retry after ${waitTime}ms`);
+      }
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      return response.json();
+    } catch (error) {
+      console.error('Fetch error for', url, ':', error);
+      throw error;
     }
-    return response.json();
   };
 
-  const { data: notebooks } = useSWR(token ? "/notebooks" : null, fetcher);
-  const { data: sections } = useSWR(scope.notebook ? `/notebooks/${scope.notebook}/sections` : null, fetcher);
-  const { data: pages } = useSWR(scope.section ? `/sections/${scope.section}/pages` : null, fetcher);
+  const { data: notebooks, error: notebooksError } = useSWR(token ? "/notebooks" : null, fetcher, {
+    // Only revalidate notebooks when explicitly requested
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    // Cache for 5 minutes
+    dedupingInterval: 300000,
+  });
+  
+  const { data: sections, error: sectionsError } = useSWR(scope.notebook ? `/notebooks/${scope.notebook}/sections` : null, fetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    dedupingInterval: 300000,
+  });
+  
+  const { data: pages, error: pagesError } = useSWR(scope.section ? `/sections/${scope.section}/pages` : null, fetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    dedupingInterval: 300000,
+  });
 
   if (!isAuth) {
     return (
@@ -92,6 +138,13 @@ export default function App() {
         pages={pages?.value || []}
         scope={scope}
         onScopeChange={setScope}
+        onRefresh={handleManualRefresh}
+        isRefreshing={isRefreshing}
+        errors={{
+          notebooks: notebooksError,
+          sections: sectionsError,
+          pages: pagesError
+        }}
       />
       
       {/* Main Content Area */}

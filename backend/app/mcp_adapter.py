@@ -16,7 +16,10 @@ class MCPClient:
 
     async def search(self, query: str, scope: dict | None = None) -> List[Dict[str, Any]]:
         payload = {"query": query, "scope": scope or {}}
-        async with httpx.AsyncClient(timeout=self.timeout, headers=self.headers) as client:
+        # Configure connection limits and timeout
+        limits = httpx.Limits(max_keepalive_connections=3, max_connections=5)
+        timeout = httpx.Timeout(self.timeout, connect=5.0)
+        async with httpx.AsyncClient(timeout=timeout, headers=self.headers, limits=limits) as client:
             instrument_async_client(client)
             resp = await client.post(f"{self.base_url}/search", json=payload)
             resp.raise_for_status()
