@@ -4,16 +4,50 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE ?? "http://localhost:8000",
 });
 
-export const authFetch = async <T>(url: string, token: string) => {
-  const resp = await api.get<T>(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return resp.data;
+export const authFetch = async (url: string, token: string) => {
+  try {
+    const resp = await api.get(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    
+    // Return a fetch-like response object
+    return {
+      ok: true,
+      status: resp.status,
+      statusText: resp.statusText,
+      json: async () => resp.data
+    };
+  } catch (error: any) {
+    // Return a fetch-like error response
+    return {
+      ok: false,
+      status: error.response?.status || 0,
+      statusText: error.response?.statusText || error.message,
+      json: async () => error.response?.data || {}
+    };
+  }
 };
 
-export const postAuth = async <T>(url: string, body: unknown, token: string) => {
-  const resp = await api.post<T>(url, body, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return resp.data;
+export const postAuth = async (url: string, body: unknown, token: string) => {
+  try {
+    const resp = await api.post(url, body, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    
+    // Return a fetch-like response object  
+    return {
+      ok: true,
+      status: resp.status,
+      statusText: resp.statusText,
+      json: async () => resp.data
+    };
+  } catch (error: any) {
+    // Return a fetch-like error response
+    return {
+      ok: false,
+      status: error.response?.status || 0,
+      statusText: error.response?.statusText || error.message,
+      json: async () => error.response?.data || {}
+    };
+  }
 };

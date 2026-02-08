@@ -3,44 +3,17 @@ param namePrefix string
 param tenantId string
 param backendImage string
 param mcpImage string
-param openAiName string
 param searchSku string = 'standard'
 param searchPartitionCount int = 1
 param searchReplicaCount int = 1
 
-var storageName = toLower(replace('${namePrefix}stor', '-', ''))
-var kvName = '${namePrefix}-kv'
 var laName = '${namePrefix}-logs'
 var appInsightsName = '${namePrefix}-appi'
 var caeName = '${namePrefix}-cae'
 var backendAppName = '${namePrefix}-api'
 var mcpAppName = '${namePrefix}-mcp'
 var searchName = '${namePrefix}-search'
-
-resource kv 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: kvName
-  location: location
-  properties: {
-    tenantId: tenantId
-    sku: { family: 'A'; name: 'standard' }
-    enableRbacAuthorization: true
-    enableSoftDelete: true
-    softDeleteRetentionInDays: 90
-    publicNetworkAccess: 'Enabled'
-  }
-}
-
-resource storage 'Microsoft.Storage/storageAccounts@2023-04-01' = {
-  name: storageName
-  location: location
-  kind: 'StorageV2'
-  sku: { name: 'Standard_LRS' }
-  properties: {
-    allowBlobPublicAccess: false
-    minimumTlsVersion: 'TLS1_2'
-    supportsHttpsTrafficOnly: true
-  }
-}
+var docIntelName = '${namePrefix}-docintel'
 
 resource la 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: laName
@@ -67,6 +40,19 @@ resource search 'Microsoft.Search/searchServices@2023-11-01' = {
     publicNetworkAccess: 'enabled'
     disableLocalAuth: false
     authenticationConfiguration: { aadAuthFailureMode: 'http401WithBearerChallenge' }
+  }
+}
+
+resource documentIntelligence 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
+  name: docIntelName
+  location: location
+  kind: 'FormRecognizer'
+  sku: { 
+    name: 'S0'
+  }
+  properties: {
+    publicNetworkAccess: 'Enabled'
+    customSubDomainName: docIntelName
   }
 }
 
@@ -110,8 +96,8 @@ resource backend 'Microsoft.App/containerApps@2024-02-02-preview' = {
           image: backendImage
           env: [
             { name: 'APP_INSIGHTS_CONNECTION_STRING'; value: appi.properties.ConnectionString }
-            { name: 'KEY_VAULT_URL'; value: kv.properties.vaultUri }
-            { name: 'SEARCH_ENDPOINT'; value: 'https://${searchName}.search.windows.net' }
+            { name: 'SEARCH__SERVICE_NAME'; value: searchName }
+            { name: 'DOCINT__ENDPOINT'; value: documentIntelligence.properties.endpoint }
           ]
         }
       ]
@@ -149,7 +135,7 @@ resource mcp 'Microsoft.App/containerApps@2024-02-02-preview' = {
   }
 }
 
-output keyVaultUri string = kv.properties.vaultUri
-output storageAccount string = storage.name
+output searchServiceName string = searchName
 output searchEndpoint string = 'https://${searchName}.search.windows.net'
+output documentIntelligenceEndpoint string = documentIntelligence.properties.endpoint
 output appInsightsConnectionString string = appi.properties.ConnectionString

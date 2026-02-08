@@ -4,8 +4,9 @@ import useSWR from "swr";
 import { authFetch, postAuth } from "./api";
 import { ChatPanel } from "./components/ChatPanel";
 import { Sidebar } from "./components/Sidebar";
+import { AdminPanel } from "./components/AdminPanel";
 
-export type Mode = "mcp" | "search";
+export type Mode = "mcp" | "search" | "admin";
 
 function useAccessToken(): string | null {
   const { instance, accounts } = useMsal();
@@ -22,7 +23,7 @@ function useAccessToken(): string | null {
       console.log("Acquiring token for account:", acct.username);
       try {
         const resp = await instance.acquireTokenSilent({
-          scopes: [import.meta.env.VITE_API_SCOPE ?? "api://your-api-app-id/access_as_user"],
+          scopes: [import.meta.env.VITE_API_SCOPE || "api://your-api-app-id/access_as_user"],
           account: acct,
         });
         console.log("Token acquired silently");
@@ -30,7 +31,7 @@ function useAccessToken(): string | null {
       } catch (error) {
         console.log("Silent token acquisition failed:", error);
         try {
-          const resp = await instance.acquireTokenPopup({ scopes: [import.meta.env.VITE_API_SCOPE ?? "api://your-api-app-id/access_as_user"] });
+          const resp = await instance.acquireTokenPopup({ scopes: [import.meta.env.VITE_API_SCOPE || "api://your-api-app-id/access_as_user"] });
           console.log("Token acquired via popup");
           setToken(resp.accessToken);
         } catch (popupError) {
@@ -51,9 +52,13 @@ export default function App() {
   const [mode, setMode] = useState<Mode>("search");
   const [scope, setScope] = useState<{ notebook?: string; section?: string; page?: string }>({});
 
-  const fetcher = (url: string) => {
+  const fetcher = async (url: string) => {
     if (!token) throw new Error("no token yet");
-    return authFetch<any>(url, token);
+    const response = await authFetch(url, token);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
   };
 
   const { data: notebooks } = useSWR(token ? "/notebooks" : null, fetcher);
@@ -67,7 +72,7 @@ export default function App() {
           <h1 className="text-2xl font-semibold mb-4">OneNote RAG</h1>
           <p className="text-slate-300 mb-6">Sign in with your work account to chat over OneNote.</p>
           <button
-            onClick={() => instance.loginPopup({ scopes: [import.meta.env.VITE_API_SCOPE ?? "api://your-api-app-id/access_as_user", "User.Read", "Notes.Read"] })}
+            onClick={() => instance.loginPopup({ scopes: [import.meta.env.VITE_API_SCOPE || "api://your-api-app-id/access_as_user", "User.Read", "Notes.Read"] })}
             className="w-full py-3 bg-accent text-slate-950 font-semibold rounded-lg"
           >
             Sign in with Entra ID
@@ -82,13 +87,27 @@ export default function App() {
       <Sidebar
         mode={mode}
         onModeChange={setMode}
-        notebooks={notebooks?.value ?? []}
-        sections={sections?.value ?? []}
-        pages={pages?.value ?? []}
+        notebooks={notebooks?.value || []}
+        sections={sections?.value || []}
+        pages={pages?.value || []}
         scope={scope}
         onScopeChange={setScope}
       />
-      <ChatPanel mode={mode} scope={scope} token={token} />
+      
+      {/* Main Content Area */}
+      {mode === "admin" ? (
+        <AdminPanel 
+          token={token} 
+          notebooks={notebooks?.value || []} 
+        />
+      ) : (
+        <ChatPanel 
+          mode={mode} 
+          scope={scope} 
+          token={token} 
+          notebooks={notebooks?.value || []}
+        />
+      )}
     </div>
   );
 }
