@@ -27,6 +27,54 @@ A sophisticated **Retrieval-Augmented Generation (RAG)** system that transforms 
 
 ---
 
+## 🖼️ **Screenshots & User Interface**
+
+### **Homepage & Authentication**
+The application features a clean, modern interface with secure Azure AD authentication.
+
+![Homepage](docs/Homepage.png)
+*Main landing page with navigation to different search modes*
+
+![Entra ID Sign-in](docs/Entra%20Signin.png)
+*Secure authentication via Azure Active Directory*
+
+### **Chat Interfaces**
+
+#### **Simple Search Mode**
+Conversational interface for natural language querying with intelligent responses and citations.
+
+![Chat with OneNote](docs/Chat%20with%20OneNote.png)
+*Basic chat interface showing natural language queries and AI responses*
+
+#### **MCP Mode Integration**  
+Real-time access to OneNote content through the Model Context Protocol server.
+
+![Chat with OneNote using MCP Tool](docs/Chat%20with%20OneNote%20using%20MCP%20Tool.png)
+*MCP mode providing live OneNote data access without pre-indexing*
+
+![GraphAPI MCP Tool](docs/GraphAPI%20MCP%20Tool.png)
+*Graph API integration through MCP for direct OneNote connectivity*
+
+#### **Attachment Processing**
+Advanced document intelligence capabilities for processing various file formats.
+
+![Chat with OneNote Attachment](docs/Chat%20with%20OneNote%20Attachment.png)
+*AI processing of OneNote attachments including PDFs, Office documents, and images*
+
+### **Advanced Search Interface**
+Structured search with comprehensive filtering options and multiple search algorithms.
+
+![Advanced Search](docs/Advance%20Search.png)
+*Advanced search interface with filtering controls, search mode selection, and detailed results*
+
+### **Admin Panel & Management**
+Real-time monitoring and management of notebook ingestion processes.
+
+![Notebook Ingestion and Admin Panel](docs/Notebook%20Ingestion%20and%20Admin%20Panel.png)
+*Admin dashboard for monitoring ingestion progress, managing notebooks, and viewing system statistics*
+
+---
+
 ## 🏗️ **Architecture**
 
 ```mermaid
